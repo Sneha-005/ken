@@ -12,219 +12,353 @@ import com.devrachit.ken.data.local.entity.UserQuestionStatusEntity
 import com.devrachit.ken.data.local.entity.UserRecentSubmissionEntity
 import com.devrachit.ken.data.local.entity.UserBadgesEntity
 import com.devrachit.ken.domain.models.LeetCodeUserInfo
-import com.devrachit.ken.domain.models.UserCalendar
-import com.devrachit.ken.domain.models.UserProfileCalendarData
 import com.devrachit.ken.domain.models.UserQuestionStatusData
 import com.devrachit.ken.domain.repository.local.LeetcodeLocalRepository
 import com.devrachit.ken.utility.NetworkUtility.Resource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flowOf
 import javax.inject.Inject
+import javax.inject.Singleton
 
+@Singleton
 class LeetcodeLocalRepositoryImpl @Inject constructor(
     private val userDao: LeetCodeUserDao,
     private val userProfileCalenderDao: LeetCodeUserProfileCalenderDao,
     private val userRecentSubmissionDao: LeetCodeUserRecentSubmissionDao,
     private val userContestRatingDao: LeetCodeUserContestRatingDao,
-    private val userBadgesDao: LeetCodeUserBadgesDao
+    private val userBadgesDao: LeetCodeUserBadgesDao,
 ) : LeetcodeLocalRepository {
 
+    companion object {
+        private const val USER_NOT_FOUND_ERROR = "User not found in cache"
+        private const val DATA_NOT_FOUND_ERROR = "Data not found in cache"
+    }
+
+    // User Info Operations
     override fun getUserInfoFlow(username: String): Flow<Resource<LeetCodeUserInfo>> {
         return userDao.getUserByUsernameFlow(username)
             .map { cachedUser ->
-                if (cachedUser != null) {
-                    Resource.Success(cachedUser.toDomainModel())
-                } else {
-                    Resource.Error("User not found in cache")
-                }
+                cachedUser?.let {
+                    Resource.Success(it.toDomainModel())
+                } ?: Resource.Error(USER_NOT_FOUND_ERROR)
+            }
+            .catch { exception ->
+                emit(Resource.Error("Database error: ${exception.message}"))
             }
     }
-    
+
     override suspend fun getUserInfo(username: String): Resource<LeetCodeUserInfo> {
-        val cachedUser = userDao.getUserByUsername(username)
-        return if (cachedUser != null) {
-            Resource.Success(cachedUser.toDomainModel())
-        } else {
-            Resource.Error("User not found in cache")
+        return try {
+            val cachedUser = userDao.getUserByUsername(username)
+            cachedUser?.let {
+                Resource.Success(it.toDomainModel())
+            } ?: Resource.Error(USER_NOT_FOUND_ERROR)
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun saveUserInfo(userInfo: LeetCodeUserInfo) {
-        if (userInfo.username != null) {
-            userDao.insertUser(
-                LeetCodeUserEntity.fromDomainModel(userInfo, System.currentTimeMillis())
-            )
+        try {
+            userInfo.username?.let { username ->
+                userDao.insertUser(
+                    LeetCodeUserEntity.fromDomainModel(userInfo, System.currentTimeMillis())
+                )
+            }
+        } catch (e: Exception) {
+            // Log error or handle appropriately
+            throw e
         }
     }
 
     override suspend fun getLastFetchTime(username: String): Long? {
-        return userDao.getUserByUsername(username)?.lastFetchTime
-    }
-
-    override suspend fun clearCache() {
-        userDao.deleteAllUsers()
-    }
-
-    override suspend fun clearUserCache(username: String) {
-        userDao.deleteUser(username)
-    }
-    
-    override suspend fun deleteUser(username: String) {
-        userDao.deleteUser(username)
-        userDao.deleteUserQuestionStatus(username)
-        userProfileCalenderDao.deleteUserCalendar(username)
-        userRecentSubmissionDao.deleteUserRecentSubmission(username)
-        userContestRatingDao.deleteUserContestRanking(username)
-        userBadgesDao.deleteUserBadges(username)
-    }
-    
-    override suspend fun cleanExpiredCache(expiryTimeMillis: Long) {
-        val expiredEntries = userDao.getExpiredCacheEntries(expiryTimeMillis)
-        expiredEntries.forEach { 
-            userDao.deleteUser(it.username)
+        return try {
+            userDao.getUserByUsername(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
         }
     }
 
+    // Cache Management
+    override suspend fun clearCache() {
+        try {
+            userDao.deleteAllUsers()
+            deleteAllUserQuestionStatus()
+            deleteAllUserProfileCalender()
+            deleteAllRecentSubmissions()
+            deleteAllUserContestRankings()
+            deleteAllUserBadges()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    override suspend fun clearUserCache(username: String) {
+        try {
+            deleteUser(username)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    override suspend fun deleteUser(username: String) {
+        try {
+            userDao.deleteUser(username)
+            userDao.deleteUserQuestionStatus(username)
+            userProfileCalenderDao.deleteUserCalendar(username)
+            userRecentSubmissionDao.deleteUserRecentSubmission(username)
+            userContestRatingDao.deleteUserContestRanking(username)
+            userBadgesDao.deleteUserBadges(username)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    override suspend fun cleanExpiredCache(expiryTimeMillis: Long) {
+        try {
+            val expiredEntries = userDao.getExpiredCacheEntries(expiryTimeMillis)
+            expiredEntries.forEach { entry ->
+                deleteUser(entry.username)
+            }
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    override suspend fun getAllUsers(): List<LeetCodeUserEntity> {
+        TODO("Not yet implemented")
+    }
+
+    // User Question Status Operations
     override suspend fun getLastUserQuestionStatusFetchTime(username: String): Long? {
-        return userDao.getUserQuestionStatus(username)?.lastFetchTime
+        return try {
+            userDao.getUserQuestionStatus(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
+        }
     }
 
     override suspend fun getUserQuestionStatus(username: String): Resource<UserQuestionStatusData> {
-        val data = userDao.getUserQuestionStatus(username)?.toDomainModel()
-        return if (data != null) {
-            Resource.Success(data)
-        } else {
-            Resource.Error("User Question Status not found in cache")
+        return try {
+            val data = userDao.getUserQuestionStatus(username)?.toDomainModel()
+            data?.let {
+                Resource.Success(it)
+            } ?: Resource.Error("User Question Status not found in cache")
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun saveUserQuestionStatus(userQuestionStatus: UserQuestionStatusEntity) {
-        userDao.insertUserQuestionStatus(userQuestionStatus)
-    }
-    override suspend fun deleteAllUserQuestionStatus() {
-        userDao.deleteAllUserQuestionStatus()
-    }
-    override suspend fun deleteUserQuestionStatus(username: String) {
-        userDao.deleteUserQuestionStatus(username)
+        try {
+            userDao.insertUserQuestionStatus(userQuestionStatus)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
+    override suspend fun deleteAllUserQuestionStatus() {
+        try {
+            userDao.deleteAllUserQuestionStatus()
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    override suspend fun getAllUserQuestionStatuses(): List<UserQuestionStatusEntity> {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun deleteUserQuestionStatus(username: String) {
+        try {
+            userDao.deleteUserQuestionStatus(username)
+        } catch (e: Exception) {
+            throw e
+        }
+    }
+
+    // User Profile Calendar Operations
     override suspend fun getUserProfileCalender(username: String): Resource<UserProfileCalenderEntity> {
-        val data = userProfileCalenderDao.getUserProfileCalender(username)
-        return if (data != null) {
-            Resource.Success(data)
-        } else {
-            Resource.Error("User Profile Calender not found in cache")
+        return try {
+            val data = userProfileCalenderDao.getUserProfileCalender(username)
+            data?.let {
+                Resource.Success(it)
+            } ?: Resource.Error("User Profile Calendar not found in cache")
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun saveUserProfileCalender(username: String, userCalender: UserProfileCalenderEntity) {
-        userProfileCalenderDao.insertUserProfileCalender(userCalender)
+        try {
+            userProfileCalenderDao.insertUserProfileCalender(userCalender)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteAllUserProfileCalender() {
-        userProfileCalenderDao.deleteAllUserCalendars()
+        try {
+            userProfileCalenderDao.deleteAllUserCalendars()
+        } catch (e: Exception) {
+            throw e
+        }
     }
+
     override suspend fun deleteUserProfileCalender(username: String) {
-        userProfileCalenderDao.deleteUserCalendar(username)
+        try {
+            userProfileCalenderDao.deleteUserCalendar(username)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun getLastUserProfileCalenderFetchTime(username: String): Long? {
-        return userProfileCalenderDao.getUserProfileCalender(username)?.lastFetchTime
+        return try {
+            userProfileCalenderDao.getUserProfileCalender(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
+        }
     }
 
+    override suspend fun getAllUserCalendars(): List<UserProfileCalenderEntity> {
+        TODO("Not yet implemented")
+    }
 
-    // these functions are for recent submissions
+    // Recent Submissions Operations
     override suspend fun saveRecentSubmissions(
         username: String,
         recentSubmissions: UserRecentSubmissionEntity
     ) {
-        userRecentSubmissionDao.insertAll(recentSubmissions)
+        try {
+            userRecentSubmissionDao.insertAll(recentSubmissions)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteAllRecentSubmissions() {
-        userRecentSubmissionDao.deleteAllUserRecentSubmissions()
+        try {
+            userRecentSubmissionDao.deleteAllUserRecentSubmissions()
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteRecentSubmissions(username: String) {
-        userRecentSubmissionDao.deleteUserRecentSubmission(username)
+        try {
+            userRecentSubmissionDao.deleteUserRecentSubmission(username)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun getRecentSubmissions(username: String): Resource<UserRecentSubmissionEntity> {
-        val data = userRecentSubmissionDao.getRecentSubmissions(username)
-        return if (data != null) {
-            Resource.Success(data)
-        } else {
-            Resource.Error("No data found")
+        return try {
+            val data = userRecentSubmissionDao.getRecentSubmissions(username)
+            data?.let {
+                Resource.Success(it)
+            } ?: Resource.Error(DATA_NOT_FOUND_ERROR)
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun getLastRecentSubmissionsFetchTime(username: String): Long? {
-        userRecentSubmissionDao.getRecentSubmissions(username)?.let {
-            return it.lastFetchTime
+        return try {
+            userRecentSubmissionDao.getRecentSubmissions(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
         }
-        return null
     }
 
+    // Contest Ranking Operations
     override suspend fun getUserContestRanking(username: String): Resource<UserContestRankingEntity> {
-        val data = userContestRatingDao.getUserContestRanking(username)
-        return if (data != null) {
-            Resource.Success(data)
-        } else {
-            Resource.Error("User Contest Ranking not found in cache")
+        return try {
+            val data = userContestRatingDao.getUserContestRanking(username)
+            data?.let {
+                Resource.Success(it)
+            } ?: Resource.Error("User Contest Ranking not found in cache")
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun saveUserContestRanking(username: String, contestRanking: UserContestRankingEntity) {
-        userContestRatingDao.insertAll(contestRanking)
+        try {
+            userContestRatingDao.insertAll(contestRanking)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteUserContestRanking(username: String) {
-        userContestRatingDao.deleteUserContestRanking(username)
+        try {
+            userContestRatingDao.deleteUserContestRanking(username)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteAllUserContestRankings() {
-        userContestRatingDao.deleteAllUserContestRankings()
+        try {
+            userContestRatingDao.deleteAllUserContestRankings()
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun getLastUserContestRankingFetchTime(username: String): Long? {
-        return userContestRatingDao.getUserContestRanking(username)?.lastFetchTime
+        return try {
+            userContestRatingDao.getUserContestRanking(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
+        }
     }
-    
-    // User Badges implementation
+
+    // User Badges Operations
     override suspend fun getUserBadges(username: String): Resource<UserBadgesEntity> {
-        val data = userBadgesDao.getUserBadges(username)
-        return if (data != null) {
-            Resource.Success(data)
-        } else {
-            Resource.Error("User Badges not found in cache")
+        return try {
+            val data = userBadgesDao.getUserBadges(username)
+            data?.let {
+                Resource.Success(it)
+            } ?: Resource.Error("User Badges not found in cache")
+        } catch (e: Exception) {
+            Resource.Error("Database error: ${e.message}")
         }
     }
 
     override suspend fun saveUserBadges(username: String, userBadges: UserBadgesEntity) {
-        userBadgesDao.insertUserBadges(userBadges)
+        try {
+            userBadgesDao.insertUserBadges(userBadges)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteUserBadges(username: String) {
-        userBadgesDao.deleteUserBadges(username)
+        try {
+            userBadgesDao.deleteUserBadges(username)
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun deleteAllUserBadges() {
-        userBadgesDao.deleteAllUserBadges()
+        try {
+            userBadgesDao.deleteAllUserBadges()
+        } catch (e: Exception) {
+            throw e
+        }
     }
 
     override suspend fun getLastUserBadgesFetchTime(username: String): Long? {
-        return userBadgesDao.getUserBadges(username)?.lastFetchTime
-    }
-
-    override suspend fun getAllUsers():List<LeetCodeUserEntity>{
-        return userDao.getAllUsers()
-    }
-
-    override suspend fun getAllUserQuestionStatuses(): List<UserQuestionStatusEntity> {
-        return userDao.getAllUserQuestionStatuses()
-    }
-
-    override suspend fun getAllUserCalendars(): List<UserProfileCalenderEntity> {
-        return userProfileCalenderDao.getAllUserCalendars()
+        return try {
+            userBadgesDao.getUserBadges(username)?.lastFetchTime
+        } catch (e: Exception) {
+            null
+        }
     }
 }

@@ -14,18 +14,39 @@ import com.devrachit.ken.domain.models.UserQuestionStatusData
 import com.devrachit.ken.domain.models.UserQuestionStatusResponse
 import com.devrachit.ken.domain.models.UserRecentAcSubmissionResponse
 import com.devrachit.ken.domain.repository.remote.LeetcodeRemoteRepository
+import com.devrachit.ken.presentation.screens.dashboard.questions.LeetCodeQuestionsPagingSource
 import com.devrachit.ken.utility.NetworkUtility.Resource
 import com.devrachit.ken.utility.constants.Constants.Companion.USERCONTESTPARTICIPATIONERROR
+import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
-import timber.log.Timber
 import javax.inject.Inject
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import com.devrachit.ken.domain.models.QuestionListResponse
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.devrachit.ken.domain.models.Question
+import okhttp3.ResponseBody
+import org.json.JSONObject
+import retrofit2.Response
 
 class LeetcodeRemoteRepositoryImpl @Inject constructor(
     private val apiService: LeetcodeApiService
 ) : LeetcodeRemoteRepository {
     private val json = Json { ignoreUnknownKeys = true }
+
+    private fun ResponseBody.readAndClose(): String {
+        return use { it.string() }
+    }
+
+    private fun createRequestBody(jsonRequest: JSONObject): okhttp3.RequestBody {
+        val jsonString = jsonRequest.toString()
+        return jsonString.toRequestBody("application/json".toMediaType())
+    }
+
 
     override suspend fun fetchUserInfo(username: String): Resource<LeetCodeUserInfo> {
         val jsonRequest = GraphqlQuery.getUserExistsJsonRequest(username = username)
@@ -153,4 +174,29 @@ class LeetcodeRemoteRepositoryImpl @Inject constructor(
             Resource.Error("Error fetching user contest ranking: ${e.message}")
         }
     }
+
+    override suspend fun fetchProblems(
+        page: Int,
+        limit: Int,
+        searchKeyword: String,
+        categorySlug: String
+    ): Resource<QuestionListResponse> {
+        val jsonRequest = GraphqlQuery.getProblemsJsonRequest(page, limit, searchKeyword, categorySlug)
+        val requestBody = createRequestBody(jsonRequest) // Use your helper method
+
+        return try {
+            val response = apiService.fetchProblems(requestBody)
+            val responseBody = response.body()?.string() ?:""
+
+            Log.d("FetchProblems", "Request: ${jsonRequest}")
+            Log.d("FetchProblems", "Response: $responseBody")
+
+            val parsed = json.decodeFromString<QuestionListResponse>(responseBody)
+            Resource.Success(parsed)
+        } catch (e: Exception) {
+            Log.e("FetchProblems", "Error fetching problems", e)
+            Resource.Error("Failed to fetch questions: ${e.message}")
+        }
+    }
+
 }

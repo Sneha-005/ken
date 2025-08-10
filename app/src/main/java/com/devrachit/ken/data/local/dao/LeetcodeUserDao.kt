@@ -34,7 +34,6 @@ interface LeetCodeUserDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertUserQuestionStatus(userQuestionStatus: UserQuestionStatusEntity)
 
-
     @Query("SELECT * FROM USER_QUESTION_STATUS WHERE username = :username")
     suspend fun getUserQuestionStatus(username: String): UserQuestionStatusEntity?
 

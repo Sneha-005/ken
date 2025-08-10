@@ -1,5 +1,6 @@
 package com.devrachit.ken.data.remote.queries
 
+import org.json.JSONArray
 import org.json.JSONObject
 
 class GraphqlQuery {
@@ -132,7 +133,7 @@ class GraphqlQuery {
             }
         }
 
-//        val getUserContestRankingQuery = """
+        //        val getUserContestRankingQuery = """
 //    query userContestRankingInfo(${"$"}username: String!) {
 //      userContestRanking(username: ${"$"}username) {
 //        attendedContestsCount
@@ -221,7 +222,6 @@ class GraphqlQuery {
         }
 
 
-
         val getUserBadgesQuery = """
     query userBadges(${"$"}username: String!) {
       matchedUser(username: ${"$"}username) {
@@ -256,6 +256,57 @@ class GraphqlQuery {
                 put("query", getUserBadgesQuery)
                 put("operationName", "userBadges")
                 put("variables", JSONObject().put("username", username))
+            }
+        }
+
+
+        // Fixed version of the problems query
+        private const val query = """
+    query problemsetQuestionListV2(${"$"}limit: Int, ${"$"}skip: Int, ${"$"}searchKeyword: String, ${"$"}categorySlug: String) {
+      problemsetQuestionListV2(
+        limit: ${"$"}limit,
+        skip: ${"$"}skip,
+        searchKeyword: ${"$"}searchKeyword,
+        sortBy: { sortField: CUSTOM, sortOrder: ASCENDING },
+        categorySlug: ${"$"}categorySlug
+      ) {
+        questions {
+          id
+          titleSlug
+          title
+          difficulty
+          paidOnly
+          acRate
+        }
+        totalLength
+        hasMore
+      }
+    }
+"""
+
+        fun getProblemsJsonRequest(
+            page: Int, // Assuming 0-based paging for Paging3
+            limit: Int,
+            searchKeyword: String = "", // Default empty string
+            categorySlug: String = ""   // Default empty string
+        ): JSONObject {
+            val skip = page * limit // This should be 0 for first page, not 60!
+            val variables = JSONObject().apply {
+                put("limit", limit)
+                put("skip", skip)
+                // Try with null values instead of empty strings
+                put("searchKeyword", if (searchKeyword.isEmpty()) null else searchKeyword)
+                // Try without categorySlug or use null
+                if (categorySlug.isNotEmpty() && categorySlug != "all-code-questions") {
+                    put("categorySlug", categorySlug)
+                }
+                // Don't include categorySlug at all for now to get all questions
+            }
+
+            return JSONObject().apply {
+                put("query", query)
+                put("operationName", "problemsetQuestionListV2")
+                put("variables", variables)
             }
         }
     }

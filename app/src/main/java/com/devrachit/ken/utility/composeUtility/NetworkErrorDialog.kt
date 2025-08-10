@@ -24,6 +24,7 @@ import com.devrachit.ken.ui.theme.TextStyleInter12Lh16Fw600
 import com.devrachit.ken.ui.theme.TextStyleInter14Lh16Fw600
 import com.devrachit.ken.ui.theme.TextStyleInter16Lh24Fw600
 import com.devrachit.ken.ui.theme.TextStyleInter20Lh24Fw700
+import com.devrachit.ken.utility.composeUtility.NetworkErrorDialog
 
 @Composable
 fun NetworkErrorDialog(

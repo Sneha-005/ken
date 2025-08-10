@@ -7,8 +7,6 @@ import com.devrachit.ken.data.local.entity.UserRecentSubmissionEntity
 import com.devrachit.ken.data.local.entity.UserContestRankingEntity
 import com.devrachit.ken.data.local.entity.UserBadgesEntity
 import com.devrachit.ken.domain.models.LeetCodeUserInfo
-import com.devrachit.ken.domain.models.UserBadges
-import com.devrachit.ken.domain.models.UserCalendar
 import com.devrachit.ken.domain.models.UserQuestionStatusData
 import com.devrachit.ken.utility.NetworkUtility.Resource
 import kotlinx.coroutines.flow.Flow
@@ -59,4 +57,5 @@ interface LeetcodeLocalRepository {
     suspend fun deleteUserBadges(username: String)
     suspend fun deleteAllUserBadges()
     suspend fun getLastUserBadgesFetchTime(username: String): Long?
+
 }

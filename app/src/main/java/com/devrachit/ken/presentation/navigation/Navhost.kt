@@ -25,9 +25,9 @@ import com.devrachit.ken.presentation.screens.dashboard.compareusers.CompareUser
 import com.devrachit.ken.presentation.screens.dashboard.compareusers.CompareUsersViewModel
 import com.devrachit.ken.presentation.screens.dashboard.home.HomeScreen
 import com.devrachit.ken.presentation.screens.dashboard.home.HomeViewmodel
-import com.devrachit.ken.presentation.screens.dashboard.questions.QuestionsScreen
+import com.devrachit.ken.presentation.screens.dashboard.questions.LeetCodeQuestionsScreen
+import com.devrachit.ken.presentation.screens.dashboard.questions.LeetCodeQuestionsViewModel
 import com.devrachit.ken.presentation.screens.dashboard.sheets.SheetsScreen
-import com.devrachit.ken.presentation.screens.dashboard.userdetails.UserDetailsScreen
 
 
 private const val ANIMATION_DURATION = 300
@@ -51,7 +51,10 @@ fun NavGraph(
         }
 
         animatedComposable(Screen.Questions.route) {
-            QuestionsScreen()
+            val viewmodel = hiltViewModel<LeetCodeQuestionsViewModel>()
+            LeetCodeQuestionsScreen(
+               viewModel = viewmodel
+            )
         }
 
         animatedComposable(Screen.Compare.route) {
